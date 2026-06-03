@@ -10,7 +10,12 @@ float you_velocity = 10;
 float you_turn = 0;
 float you_dir = 0;
 
-float piover180 = 0.01745329251994329577;
+static const float DEGREES_TO_RADIANS = 0.01745329251994329577f;
+static const float TURN_SPEED = 10.0f;
+static const int DEFAULT_WINDOW_WIDTH = 640;
+static const int DEFAULT_WINDOW_HEIGHT = 480;
+static const int FPS_SAMPLE_INTERVAL_MS = 100;
+static char DEFAULT_WORLD[] = "world";
 
 bool light = true;
 GLfloat LightAmbient[]= { 0.5f, 0.5f, 0.5f, 1.0f };
@@ -26,6 +31,13 @@ bool debug = false;
 void quit_app( int code ) {
     SDL_Quit( );
     exit( code );
+}
+
+static void set_lighting( bool enabled ) {
+    if ( enabled )
+        glEnable( GL_LIGHTING );
+    else
+        glDisable( GL_LIGHTING );
 }
 
 void handle_keydown( SDL_keysym* keysym ) {
@@ -54,10 +66,7 @@ void handle_keydown( SDL_keysym* keysym ) {
             break;
         case SDLK_l:
             light = !light;
-            if ( !light )
-            glDisable( GL_LIGHTING );
-            else
-            glEnable( GL_LIGHTING );
+            set_lighting( light );
             break;
         case SDLK_d:
             debug = !debug;
@@ -104,14 +113,19 @@ void you_compensate( void ) {
     glTranslatef( -you_x, -1, -you_z);
 }
 
+static int check_player_bounds( float x, float z ) {
+    return boundCheck( x, x, z, z );
+}
+
 void draw_screen( void ) {
     // step
-    you_angle += ( 10 * you_velocity * you_turn ) / fps;
+    you_angle += ( TURN_SPEED * you_velocity * you_turn ) / fps;
     
-    float you_x_new = you_x - ( (float)sin(you_angle*piover180) * you_velocity * you_dir ) / fps;
-    float you_z_new = you_z + ( (float)cos(you_angle*piover180) * you_velocity * you_dir ) / fps;
-    int joel = boundCheck(you_x_new, you_x_new, you_z_new, you_z_new); // todo change this to avoid repetition
-    if (joel == 1) {
+    float angle_radians = you_angle * DEGREES_TO_RADIANS;
+    float you_x_new = you_x - ( (float)sin(angle_radians) * you_velocity * you_dir ) / fps;
+    float you_z_new = you_z + ( (float)cos(angle_radians) * you_velocity * you_dir ) / fps;
+    int collision = check_player_bounds( you_x_new, you_z_new );
+    if (collision == 1) {
         you_x = you_x_new;
         you_z = you_z_new;
     }
@@ -138,7 +152,7 @@ void draw_screen( void ) {
         glPrint("FPS: %f", fps);
     }
     
-    if (joel == 12) {
+    if (collision == 12) {
         glLoadIdentity(); glTranslatef(0, 0, -1);
         glColor3f(1, 1, 1);
         glRasterPos2f(-0.7f, 0.5f);
@@ -149,8 +163,9 @@ void draw_screen( void ) {
     
     Frames++;
     GLint t = SDL_GetTicks();
-    if (t - T0 >= 100) {
-        GLfloat seconds = (t - T0) / 1000.0;
+    GLint elapsed = t - T0;
+    if (elapsed >= FPS_SAMPLE_INTERVAL_MS) {
+        GLfloat seconds = elapsed / 1000.0f;
         fps = Frames / seconds;
         T0 = t;
         Frames = 0;
@@ -182,11 +197,11 @@ static void setup_opengl( int width, int height ) {
 
 int main(int argc, char* argv[]) {
     bool fullscreen = false;
-    char* world = "world";
-    for (int i = 0; i < argc; i++) {
+    char* world = DEFAULT_WORLD;
+    for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "-win") == 0) fullscreen = false;
         if (strcmp(argv[i], "-f") == 0) fullscreen = true;
-        if (strcmp(argv[i], "-w") == 0)
+        if (strcmp(argv[i], "-w") == 0 && i + 1 < argc)
             world = argv[i + 1];
         if (strcmp(argv[i], "-d") == 0) debug = true;
     }
@@ -214,8 +229,8 @@ int main(int argc, char* argv[]) {
         quit_app(1);
     }
 
-    width = 640;
-    height = 480;
+    width = DEFAULT_WINDOW_WIDTH;
+    height = DEFAULT_WINDOW_HEIGHT;
     bpp = info->vfmt->BitsPerPixel;
 
     SDL_GL_SetAttribute(SDL_GL_RED_SIZE, 5);
@@ -237,7 +252,7 @@ int main(int argc, char* argv[]) {
     while (1) {
         process_events();
         draw_screen();
-        if (init) { glEnable(GL_LIGHTING); init = false; }
+        if (init) { set_lighting( light ); init = false; }
     }
 
     return 0;
